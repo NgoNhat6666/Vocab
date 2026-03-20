@@ -8,7 +8,7 @@ export interface Word {
   collocations: string[];
   example: string;
   vietnameseExample: string;
-  level: 'A1' | 'A2' | 'B1' | 'B2' | 'C1';
+  level: 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
   band: number; // 0 to 7
   topicId?: string; // Optional topic association
 }
