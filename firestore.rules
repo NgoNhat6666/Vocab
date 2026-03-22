@@ -1,0 +1,126 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - xp: number (required, >= 0)
+    //   - streak: number (required, >= 0)
+    //   - lastActive: string (required, ISO 8601)
+    //   - unlockedBands: list (optional, numbers)
+    //   - unlockedTopics: list (optional, strings)
+    //   - completedWords: list (optional, strings)
+    //   - completedTopics: list (optional, strings)
+    //   - completedGrammar: list (optional, strings)
+    //   - completedMicroSkills: list (optional, strings)
+    //   - wordProgress: map (optional)
+    //   - wordsToReview: list (optional, strings)
+    //   - dailyPlan: map (optional)
+    //   - displayName: string (optional, < 100 chars)
+    //   - photoURL: string (optional, valid URL)
+    //   - role: string (optional, 'admin' or 'user')
+    //
+    // Collection: leaderboard
+    // Document ID: {userId}
+    // Fields:
+    //   - uid: string (required, matches userId)
+    //   - displayName: string (required, < 100 chars)
+    //   - photoURL: string (optional, valid URL)
+    //   - xp: number (required, >= 0)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "kendo2605@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidUrl(url) {
+      return url is string && (url.matches("^https://.*") || url.matches("^http://.*"));
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function isValidList(l, maxSize) {
+      return l is list && l.size() <= maxSize;
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUserStats(data) {
+      return hasRequiredFields(['xp', 'streak', 'lastActive']) &&
+             data.xp is number && data.xp >= 0 &&
+             data.streak is number && data.streak >= 0 &&
+             isValidDateString(data.lastActive) &&
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() < 100)) &&
+             (!('photoURL' in data) || isValidUrl(data.photoURL)) &&
+             (!('unlockedBands' in data) || isValidList(data.unlockedBands, 10)) &&
+             (!('unlockedTopics' in data) || isValidList(data.unlockedTopics, 100)) &&
+             (!('completedWords' in data) || isValidList(data.completedWords, 30000)) &&
+             (!('completedTopics' in data) || isValidList(data.completedTopics, 200)) &&
+             (!('completedGrammar' in data) || isValidList(data.completedGrammar, 50)) &&
+             (!('completedMicroSkills' in data) || isValidList(data.completedMicroSkills, 100)) &&
+             (!('wordProgress' in data) || data.wordProgress is map) &&
+             (!('wordsToReview' in data) || isValidList(data.wordsToReview, 100)) &&
+             (!('dailyPlan' in data) || data.dailyPlan is map);
+    }
+
+    function isValidLeaderboardEntry(data) {
+      return hasRequiredFields(['uid', 'displayName', 'xp']) &&
+             data.uid is string && data.uid == request.auth.uid &&
+             data.displayName is string && data.displayName.size() < 100 &&
+             data.xp is number && data.xp >= 0 &&
+             (!('photoURL' in data) || isValidUrl(data.photoURL));
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && isValidUserStats(request.resource.data) && !('role' in request.resource.data);
+      allow update: if (isOwner(userId) && isValidUserStats(request.resource.data) && 
+                       (!('role' in request.resource.data) || request.resource.data.role == resource.data.role)) || 
+                       isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /leaderboard/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId) && isValidLeaderboardEntry(request.resource.data);
+      allow update: if isOwner(userId) && isValidLeaderboardEntry(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

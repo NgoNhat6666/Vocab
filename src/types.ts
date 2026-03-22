@@ -15,7 +15,7 @@ export interface Word {
 
 export interface QuizQuestion {
   id: string;
-  type: 'definition' | 'collocation' | 'example' | 'matching' | 'fill_in_blank' | 'audio' | 'image_selection' | 'typing' | 'sentence_building';
+  type: 'definition' | 'collocation' | 'example' | 'matching' | 'fill_in_blank' | 'audio' | 'image_selection' | 'typing' | 'sentence_building' | 'speaking';
   question: string;
   options: string[];
   correctAnswer: string;
@@ -27,6 +27,21 @@ export interface QuizQuestion {
   scrambledWords?: string[];
 }
 
+export interface DailyTask {
+  id: string;
+  type: 'vocabulary' | 'grammar' | 'review';
+  targetId: string;
+  isDone: boolean;
+  title: string;
+  description: string;
+}
+
+export interface DailyPlan {
+  date: string;
+  tasks: DailyTask[];
+  isCompleted: boolean;
+}
+
 export interface UserStats {
   xp: number;
   streak: number;
@@ -35,6 +50,26 @@ export interface UserStats {
   unlockedTopics: string[];
   completedWords: string[];
   completedTopics?: string[];
+  completedGrammar?: string[];
+  completedMicroSkills?: string[];
+  // SRS fields
+  wordProgress?: Record<string, { srsLevel: number; nextReview: string }>;
+  wordsToReview?: string[];
+  // Daily Plan
+  dailyPlan?: DailyPlan;
+}
+
+export interface MicroSkill {
+  id: string;
+  type: 'reading' | 'listening';
+  title: string;
+  passage?: string; // For reading
+  audioText?: string; // For listening (TTS)
+  question: string;
+  options?: string[]; // For multiple choice (TFNG)
+  correctAnswer: string;
+  explanation: string;
+  hint?: string;
 }
 
 export interface QuizState {

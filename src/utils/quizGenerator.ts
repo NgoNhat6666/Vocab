@@ -2,7 +2,7 @@ import { Word, QuizQuestion } from '../types';
 import { CAMBRIDGE_ROADMAP } from '../data/roadmap_vocab';
 import { BAND_TOPICS } from '../data/topics';
 
-export const getWordsForTopic = (band: number, topicId: string, count: number = 5): Word[] => {
+export const getWordsForTopic = (band: number, topicId: string, completedWords: string[] = [], count: number = 5): Word[] => {
   // Try to filter words by band and topicId first
   let topicWords = CAMBRIDGE_ROADMAP.filter(w => w.band === band && w.topicId === topicId);
   
@@ -25,35 +25,69 @@ export const getWordsForTopic = (band: number, topicId: string, count: number = 
   // If still no words (e.g., empty band), return empty
   if (topicWords.length === 0) return [];
 
-  // Also get some words from previous bands/topics for review
-  const otherWords = CAMBRIDGE_ROADMAP.filter(w => w.band < band);
+  // Filter out words already completed by the user
+  const unlearnedWords = topicWords.filter(w => !completedWords.includes(w.id));
   
-  // Mix topic words with review words
-  // 70% from current topic, 30% from review
-  const mainCount = Math.ceil(count * 0.7);
-  const reviewCount = count - mainCount;
-
-  const shuffledTopicWords = [...topicWords].sort(() => 0.5 - Math.random());
-  const shuffledReviewWords = [...otherWords].sort(() => 0.5 - Math.random());
-
-  const selectedWords = shuffledTopicWords.slice(0, mainCount);
-  
-  if (selectedWords.length < count && shuffledReviewWords.length > 0) {
-    selectedWords.push(...shuffledReviewWords.slice(0, count - selectedWords.length));
+  // If all words in this topic are learned, we can either:
+  // 1. Return a random set for review
+  // 2. Return an empty array (to show topic as fully completed)
+  // Let's return a random set for review if all are learned
+  if (unlearnedWords.length === 0) {
+    return [...topicWords].sort(() => 0.5 - Math.random()).slice(0, count);
   }
 
-  // If still not enough words, take more from the current topic
+  // Take the next batch of unlearned words
+  // We don't shuffle here to keep it systematic, or we can shuffle unlearned words
+  const shuffledUnlearned = [...unlearnedWords].sort(() => 0.5 - Math.random());
+  const selectedWords = shuffledUnlearned.slice(0, count);
+
+  // If not enough unlearned words, fill with already learned words from the same topic for review
   if (selectedWords.length < count) {
-    const remainingTopicWords = shuffledTopicWords.slice(mainCount);
-    selectedWords.push(...remainingTopicWords.slice(0, count - selectedWords.length));
+    const learnedWords = topicWords.filter(w => completedWords.includes(w.id));
+    const shuffledLearned = [...learnedWords].sort(() => 0.5 - Math.random());
+    selectedWords.push(...shuffledLearned.slice(0, count - selectedWords.length));
   }
 
   return selectedWords;
 };
 
-export const generateQuiz = (band: number, topicId: string, count: number = 5): QuizQuestion[] => {
-  const selectedWords = getWordsForTopic(band, topicId, count);
+export const getTopicStats = (band: number, topicId: string, completedWords: string[]) => {
+  let topicWords = CAMBRIDGE_ROADMAP.filter(w => w.band === band && w.topicId === topicId);
+  
+  if (topicWords.length === 0) {
+    const bandWords = CAMBRIDGE_ROADMAP.filter(w => w.band === band);
+    const topicsForBand = BAND_TOPICS[band] || [];
+    const topicIndex = topicsForBand.findIndex(t => t.id === topicId);
+    
+    if (topicIndex !== -1 && topicsForBand.length > 0) {
+      const wordsPerTopic = Math.ceil(bandWords.length / topicsForBand.length);
+      const startIndex = topicIndex * wordsPerTopic;
+      const endIndex = startIndex + wordsPerTopic;
+      topicWords = bandWords.slice(startIndex, endIndex);
+    } else {
+      topicWords = bandWords;
+    }
+  }
 
+  const total = topicWords.length;
+  const completed = topicWords.filter(w => completedWords.includes(w.id)).length;
+  
+  return { total, completed };
+};
+
+export const getReviewWords = (wordProgress: Record<string, { srsLevel: number; nextReview: string }>, count: number = 10): Word[] => {
+  const now = new Date().toISOString();
+  const reviewIds = Object.entries(wordProgress)
+    .filter(([_, progress]) => progress.nextReview <= now)
+    .map(([wordId]) => wordId);
+
+  if (reviewIds.length === 0) return [];
+
+  const selectedIds = reviewIds.sort(() => 0.5 - Math.random()).slice(0, count);
+  return CAMBRIDGE_ROADMAP.filter(w => selectedIds.includes(w.id));
+};
+
+export const generateQuizForWords = (selectedWords: Word[]): QuizQuestion[] => {
   return selectedWords.map((word) => {
     const typeRand = Math.random();
     let type: QuizQuestion['type'] = 'definition';
@@ -64,24 +98,26 @@ export const generateQuiz = (band: number, topicId: string, count: number = 5): 
     let pairs: { en: string; vi: string }[] | undefined;
     let scrambledWords: string[] | undefined;
 
-    if (word.image && typeRand < 0.15) {
+    if (word.image && typeRand < 0.1) {
       type = 'image_selection';
-    } else if (typeRand < 0.3) {
+    } else if (typeRand < 0.2) {
       type = 'definition';
-    } else if (typeRand < 0.45) {
+    } else if (typeRand < 0.3) {
       type = 'collocation';
-    } else if (typeRand < 0.55) {
+    } else if (typeRand < 0.4) {
       type = 'example';
-    } else if (typeRand < 0.65) {
+    } else if (typeRand < 0.5) {
       type = 'fill_in_blank';
-    } else if (typeRand < 0.75) {
+    } else if (typeRand < 0.6) {
       type = 'audio';
-    } else if (typeRand < 0.85) {
+    } else if (typeRand < 0.7) {
       type = 'matching';
-    } else if (typeRand < 0.95) {
+    } else if (typeRand < 0.8) {
       type = 'typing';
-    } else {
+    } else if (typeRand < 0.9) {
       type = 'sentence_building';
+    } else {
+      type = 'speaking';
     }
 
     if (type === 'image_selection') {
@@ -210,6 +246,10 @@ export const generateQuiz = (band: number, topicId: string, count: number = 5): 
       scrambledWords = scrambled;
       correctAnswer = words.join(' ');
       explanation = `Câu hoàn chỉnh là: "${word.example}"`;
+    } else if (type === 'speaking') {
+      question = `Phát âm từ sau:`;
+      correctAnswer = word.word;
+      explanation = `Từ đúng là "${word.word}" (${word.vietnameseDefinition}).`;
     }
 
     return {

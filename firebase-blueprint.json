@@ -1,0 +1,48 @@
+{
+  "entities": {
+    "UserStats": {
+      "title": "UserStats",
+      "description": "User progress and statistics",
+      "type": "object",
+      "properties": {
+        "xp": { "type": "number", "description": "Experience points" },
+        "streak": { "type": "number", "description": "Daily streak" },
+        "lastActive": { "type": "string", "format": "date-time", "description": "Last active timestamp" },
+        "unlockedBands": { "type": "array", "items": { "type": "number" } },
+        "unlockedTopics": { "type": "array", "items": { "type": "string" } },
+        "completedWords": { "type": "array", "items": { "type": "string" } },
+        "completedTopics": { "type": "array", "items": { "type": "string" } },
+        "completedGrammar": { "type": "array", "items": { "type": "string" } },
+        "completedMicroSkills": { "type": "array", "items": { "type": "string" } },
+        "wordProgress": { "type": "object", "description": "SRS progress for each word" },
+        "wordsToReview": { "type": "array", "items": { "type": "string" } },
+        "dailyPlan": { "type": "object", "description": "Daily learning plan" },
+        "displayName": { "type": "string", "description": "User's display name for leaderboard" },
+        "photoURL": { "type": "string", "description": "User's photo URL for leaderboard" }
+      },
+      "required": ["xp", "streak", "lastActive"]
+    },
+    "LeaderboardEntry": {
+      "title": "LeaderboardEntry",
+      "description": "Public leaderboard entry",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "User ID" },
+        "displayName": { "type": "string", "description": "User's display name" },
+        "photoURL": { "type": "string", "description": "User's photo URL" },
+        "xp": { "type": "number", "description": "Total XP" }
+      },
+      "required": ["uid", "displayName", "xp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserStats",
+      "description": "Private user statistics and progress"
+    },
+    "/leaderboard/{userId}": {
+      "schema": "LeaderboardEntry",
+      "description": "Public leaderboard entries"
+    }
+  }
+}

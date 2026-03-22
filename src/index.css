@@ -1,11 +1,51 @@
-@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Nunito", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
+  
+  --color-brand-blue: #1cb0f6;
+  --color-brand-green: #58cc02;
+  --color-brand-orange: #ff9600;
+  --color-brand-red: #ff4b4b;
+  --color-brand-yellow: #ffc800;
+  --color-ink: #4b4b4b;
+  --color-ink-muted: #afafaf;
+  --color-surface: #f7f7f7;
+  --color-line: #e5e5e5;
 }
 
 body {
-  @apply bg-white text-[#4b4b4b];
-  font-family: "Nunito", sans-serif;
+  @apply bg-white text-ink;
+  font-family: "Inter", sans-serif;
+}
+
+.font-display {
+  font-family: "Space Grotesk", sans-serif;
+}
+
+/* Custom 3D Button Utility */
+.btn-3d {
+  @apply relative transition-all active:translate-y-1 active:shadow-none;
+}
+
+.btn-3d-blue {
+  @apply bg-brand-blue text-white shadow-[0_4px_0_0_#1899d6];
+}
+
+.btn-3d-green {
+  @apply bg-brand-green text-white shadow-[0_4px_0_0_#46a302];
+}
+
+.btn-3d-orange {
+  @apply bg-brand-orange text-white shadow-[0_4px_0_0_#e68700];
+}
+
+.btn-3d-red {
+  @apply bg-brand-red text-white shadow-[0_4px_0_0_#d33131];
+}
+
+.btn-3d-white {
+  @apply bg-white text-ink border-2 border-line shadow-[0_4px_0_0_#e5e5e5];
 }
