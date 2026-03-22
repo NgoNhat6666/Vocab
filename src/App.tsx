@@ -51,16 +51,18 @@ import {
   ChevronDown,
   Target,
   LogOut,
-  LogIn
+  LogIn,
+  Sparkles,
+  Send,
+  Loader2
 } from 'lucide-react';
 import { QuizQuestion, QuizState, UserStats, Word } from './types';
-import LeaderboardView from './components/LeaderboardView';
-import ProfileView from './components/ProfileView';
 import { generateQuizForWords, getWordsForTopic, getTopicStats, getReviewWords } from './utils/quizGenerator';
 import { BAND_TOPICS, Topic } from './data/topics';
 import { CAMBRIDGE_ROADMAP } from './data/roadmap_vocab';
 import { GRAMMAR_LESSONS } from './data/grammar';
 import { MICRO_SKILLS } from './data/microSkills';
+import { getAIExplanation, getWritingFeedback, generateAIChatResponse } from './services/geminiService';
 import { auth, db, signInWithGoogle, logout, handleFirestoreError, OperationType } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import type { User } from 'firebase/auth';
@@ -128,7 +130,7 @@ function AppContent() {
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [stats, setStats] = useState<UserStats>(INITIAL_STATS);
   
-  const [view, setView] = useState<'roadmap' | 'learn' | 'quiz' | 'finished' | 'profile' | 'notebook' | 'grammar_theory' | 'daily_plan' | 'micro_skills' | 'micro_skill_detail' | 'leaderboard'>('roadmap');
+  const [view, setView] = useState<'roadmap' | 'learn' | 'quiz' | 'finished' | 'profile' | 'notebook' | 'grammar_theory' | 'daily_plan' | 'micro_skills' | 'micro_skill_detail' | 'leaderboard' | 'ai_lab' | 'ai_writing' | 'ai_chat'>('roadmap');
   const [leaderboardData, setLeaderboardData] = useState<any[]>([]);
   const [quizState, setQuizState] = useState<QuizState | null>(null);
   const [learnWords, setLearnWords] = useState<Word[]>([]);
@@ -168,6 +170,15 @@ function AppContent() {
   const [isListening, setIsListening] = useState(false);
   const [speechTranscript, setSpeechTranscript] = useState('');
   const [speechScore, setSpeechScore] = useState<number | null>(null);
+
+  // AI Lab states
+  const [aiWritingText, setAiWritingText] = useState('');
+  const [aiWritingFeedback, setAiWritingFeedback] = useState('');
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [aiChatMessages, setAiChatMessages] = useState<{ role: 'user' | 'model', parts: { text: string }[] }[]>([]);
+  const [aiChatInput, setAiChatInput] = useState('');
+  const [aiChatTopic, setAiChatTopic] = useState('Daily Life');
+  const [aiExplanation, setAiExplanation] = useState<{ word: string, content: string } | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -1478,6 +1489,12 @@ function AppContent() {
           <Trophy fill={view === 'leaderboard' ? "white" : "none"} size={24} />
         </button>
         <button 
+          onClick={() => setView('ai_lab')} 
+          className={`flex flex-col items-center p-4 rounded-2xl transition-all duration-300 ${view === 'ai_lab' || view === 'ai_writing' || view === 'ai_chat' ? 'bg-brand-blue text-white shadow-lg shadow-brand-blue/30 -translate-y-1' : 'text-ink-muted hover:bg-ink/5'}`}
+        >
+          <Sparkles fill={view === 'ai_lab' || view === 'ai_writing' || view === 'ai_chat' ? "white" : "none"} size={24} />
+        </button>
+        <button 
           onClick={startReview} 
           className={`flex flex-col items-center p-4 rounded-2xl transition-all duration-300 text-ink-muted hover:bg-ink/5 relative`}
         >
@@ -1500,6 +1517,223 @@ function AppContent() {
         >
           <UserIcon fill={view === 'profile' ? "white" : "none"} size={24} />
         </button>
+      </div>
+    );
+  };
+
+  const renderAILab = () => {
+    return (
+      <div className="min-h-screen bg-bg pb-32 flex flex-col items-center">
+        <div className="w-full bg-white/80 backdrop-blur-md border-b border-ink/5 px-6 py-10 flex flex-col gap-2 max-w-2xl mx-auto sticky top-0 z-40">
+          <h1 className="text-3xl font-black text-ink font-display tracking-tight text-center">AI Learning Lab</h1>
+          <p className="text-center text-ink-muted font-bold">Nâng cao kỹ năng tiếng Anh với trợ lý AI thông minh.</p>
+        </div>
+
+        <div className="w-full max-w-2xl mx-auto p-6 flex flex-col gap-6">
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => setView('ai_writing')}
+            className="p-8 bg-white border-2 border-ink/5 rounded-[2.5rem] shadow-sm hover:border-brand-blue/30 transition-all text-left flex items-center gap-6"
+          >
+            <div className="w-20 h-20 bg-brand-blue/10 text-brand-blue rounded-3xl flex items-center justify-center">
+              <Feather size={40} />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-2xl font-black text-ink font-display mb-1">AI Writing Assistant</h3>
+              <p className="text-ink-muted font-bold">Viết đoạn văn và nhận phản hồi chi tiết từ AI.</p>
+            </div>
+          </motion.button>
+
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => {
+              setAiChatMessages([]);
+              setView('ai_chat');
+            }}
+            className="p-8 bg-white border-2 border-ink/5 rounded-[2.5rem] shadow-sm hover:border-brand-orange/30 transition-all text-left flex items-center gap-6"
+          >
+            <div className="w-20 h-20 bg-brand-orange/10 text-brand-orange rounded-3xl flex items-center justify-center">
+              <MessageCircle size={40} />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-2xl font-black text-ink font-display mb-1">AI Conversation Partner</h3>
+              <p className="text-ink-muted font-bold">Luyện nói và chat với người bản xứ AI.</p>
+            </div>
+          </motion.button>
+
+          <div className="bg-brand-purple/5 border-2 border-brand-purple/10 rounded-[2.5rem] p-8 mt-4">
+            <h4 className="text-brand-purple font-black uppercase tracking-widest text-sm mb-4 flex items-center gap-2">
+              <Sparkles size={18} /> AI Tip of the Day
+            </h4>
+            <p className="text-ink font-bold italic">"Sử dụng AI để giải thích các sắc thái nghĩa khác nhau của từ vựng sẽ giúp bạn ghi điểm cao hơn trong phần Lexical Resource của IELTS."</p>
+          </div>
+        </div>
+        {renderBottomNav()}
+      </div>
+    );
+  };
+
+  const renderAIWriting = () => {
+    const handleGetFeedback = async () => {
+      if (!aiWritingText.trim()) return;
+      setIsAiLoading(true);
+      try {
+        const feedback = await getWritingFeedback(aiWritingText, stats.completedWords.slice(-5));
+        setAiWritingFeedback(feedback);
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setIsAiLoading(false);
+      }
+    };
+
+    return (
+      <div className="min-h-screen bg-bg flex flex-col max-w-2xl mx-auto">
+        <div className="p-6 flex items-center gap-4 bg-white border-b border-ink/5 sticky top-0 z-40">
+          <button onClick={() => setView('ai_lab')} className="w-10 h-10 rounded-xl flex items-center justify-center text-ink-muted hover:bg-ink/5">
+            <X size={24} />
+          </button>
+          <h1 className="text-xl font-black text-ink font-display tracking-tight uppercase">Writing Assistant</h1>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 pb-32">
+          <div className="mb-8">
+            <label className="block text-xs font-black text-ink-muted uppercase tracking-widest mb-3 ml-2">Your Writing</label>
+            <textarea
+              value={aiWritingText}
+              onChange={(e) => setAiWritingText(e.target.value)}
+              placeholder="Hãy viết một đoạn văn ngắn (50-100 từ) về bất kỳ chủ đề nào..."
+              className="w-full h-64 bg-white border-2 border-ink/5 rounded-[2rem] p-8 font-medium text-lg text-ink outline-none focus:border-brand-blue focus:shadow-xl transition-all resize-none"
+            />
+          </div>
+
+          {!aiWritingFeedback && (
+            <button
+              onClick={handleGetFeedback}
+              disabled={isAiLoading || !aiWritingText.trim()}
+              className={`w-full py-5 rounded-2xl font-black text-xl uppercase tracking-widest transition-all flex items-center justify-center gap-3 ${
+                aiWritingText.trim() && !isAiLoading ? 'bg-brand-blue text-white shadow-lg shadow-brand-blue/20 active:translate-y-1' : 'bg-ink/5 text-ink-muted cursor-not-allowed'
+              }`}
+            >
+              {isAiLoading ? <Loader2 className="animate-spin" /> : <Sparkles />}
+              {isAiLoading ? 'Analyzing...' : 'Get AI Feedback'}
+            </button>
+          )}
+
+          {aiWritingFeedback && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white border-2 border-brand-blue/20 rounded-[2.5rem] p-8 shadow-xl"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-2xl font-black text-brand-blue font-display uppercase tracking-tight">AI Feedback</h3>
+                <button onClick={() => setAiWritingFeedback('')} className="text-ink-muted hover:text-ink font-bold text-sm">Clear</button>
+              </div>
+              <div className="prose prose-ink max-w-none">
+                <ReactMarkdown>{aiWritingFeedback}</ReactMarkdown>
+              </div>
+              <button
+                onClick={() => setView('ai_lab')}
+                className="w-full mt-8 py-4 bg-brand-green text-white rounded-xl font-black uppercase tracking-widest shadow-lg shadow-brand-green/20"
+              >
+                Back to Lab
+              </button>
+            </motion.div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderAIChat = () => {
+    const handleSendMessage = async () => {
+      if (!aiChatInput.trim() || isAiLoading) return;
+      
+      const userMessage = { role: 'user' as const, parts: [{ text: aiChatInput }] };
+      const newMessages = [...aiChatMessages, userMessage];
+      setAiChatMessages(newMessages);
+      setAiChatInput('');
+      setIsAiLoading(true);
+
+      try {
+        const aiResponse = await generateAIChatResponse(newMessages, aiChatTopic);
+        setAiChatMessages([...newMessages, { role: 'model' as const, parts: [{ text: aiResponse }] }]);
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setIsAiLoading(false);
+      }
+    };
+
+    return (
+      <div className="min-h-screen bg-bg flex flex-col max-w-2xl mx-auto">
+        <div className="p-6 flex items-center gap-4 bg-white border-b border-ink/5 sticky top-0 z-40">
+          <button onClick={() => setView('ai_lab')} className="w-10 h-10 rounded-xl flex items-center justify-center text-ink-muted hover:bg-ink/5">
+            <X size={24} />
+          </button>
+          <div className="flex-1">
+            <h1 className="text-xl font-black text-ink font-display tracking-tight uppercase">AI Chat Partner</h1>
+            <p className="text-[10px] font-black text-brand-orange uppercase tracking-widest">Topic: {aiChatTopic}</p>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4">
+          {aiChatMessages.length === 0 && (
+            <div className="flex-1 flex flex-col items-center justify-center text-center p-10 opacity-50">
+              <div className="w-20 h-20 bg-brand-orange/10 text-brand-orange rounded-full flex items-center justify-center mb-6">
+                <MessageCircle size={40} />
+              </div>
+              <p className="text-ink font-bold text-lg">Bắt đầu cuộc trò chuyện bằng cách gửi tin nhắn chào hỏi!</p>
+              <p className="text-ink-muted text-sm mt-2">AI sẽ giúp bạn luyện tập phản xạ và sửa lỗi ngữ pháp.</p>
+            </div>
+          )}
+          {aiChatMessages.map((msg, idx) => (
+            <motion.div
+              key={idx}
+              initial={{ opacity: 0, x: msg.role === 'user' ? 20 : -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className={`max-w-[85%] p-5 rounded-[2rem] font-medium text-lg ${
+                msg.role === 'user' 
+                  ? 'bg-brand-blue text-white self-end rounded-tr-none' 
+                  : 'bg-white border-2 border-ink/5 text-ink self-start rounded-tl-none shadow-sm'
+              }`}
+            >
+              <ReactMarkdown>{msg.parts[0].text}</ReactMarkdown>
+            </motion.div>
+          ))}
+          {isAiLoading && (
+            <div className="bg-white border-2 border-ink/5 text-ink self-start rounded-[2rem] rounded-tl-none p-5 shadow-sm flex gap-2">
+              <div className="w-2 h-2 bg-brand-blue rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+              <div className="w-2 h-2 bg-brand-blue rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+              <div className="w-2 h-2 bg-brand-blue rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+            </div>
+          )}
+        </div>
+
+        <div className="p-6 bg-white border-t border-ink/5 sticky bottom-0">
+          <div className="relative flex items-center gap-3">
+            <input
+              type="text"
+              value={aiChatInput}
+              onChange={(e) => setAiChatInput(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+              placeholder="Type your message..."
+              className="flex-1 bg-bg border-2 border-ink/5 rounded-2xl py-4 px-6 font-bold text-ink outline-none focus:border-brand-blue focus:bg-white transition-all"
+            />
+            <button
+              onClick={handleSendMessage}
+              disabled={!aiChatInput.trim() || isAiLoading}
+              className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${
+                aiChatInput.trim() && !isAiLoading ? 'bg-brand-blue text-white shadow-lg shadow-brand-blue/20' : 'bg-ink/5 text-ink-muted'
+              }`}
+            >
+              <Send size={24} />
+            </button>
+          </div>
+        </div>
       </div>
     );
   };
@@ -1909,10 +2143,10 @@ function AppContent() {
     );
   };
 
-  /*
   const renderProfile = () => {
     return (
       <div className="min-h-screen bg-bg pb-32 flex flex-col items-center">
+        {/* Header */}
         <div className="sticky top-0 z-50 w-full bg-white border-b border-ink/5 px-6 py-6 flex justify-between items-center max-w-2xl mx-auto">
           <h1 className="text-2xl font-black text-ink font-display tracking-tight uppercase">Profile</h1>
           <button className="w-10 h-10 rounded-xl flex items-center justify-center text-ink-muted hover:bg-ink/5 transition-colors">
@@ -1921,6 +2155,7 @@ function AppContent() {
         </div>
         
         <div className="w-full max-w-2xl mx-auto p-6 flex flex-col gap-8 mt-4">
+          {/* User Info Card */}
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -1947,6 +2182,7 @@ function AppContent() {
             </div>
           </motion.div>
 
+          {/* Statistics Grid */}
           <div>
             <h3 className="text-xl font-black text-ink font-display uppercase tracking-tight mb-6 flex items-center gap-3">
               <div className="w-2 h-6 bg-brand-orange rounded-full" />
@@ -2011,6 +2247,7 @@ function AppContent() {
             </div>
           </div>
 
+          {/* Achievements Placeholder */}
           <div>
             <h3 className="text-xl font-black text-ink font-display uppercase tracking-tight mb-6 flex items-center gap-3">
               <div className="w-2 h-6 bg-brand-purple rounded-full" />
@@ -2040,7 +2277,6 @@ function AppContent() {
     );
   };
 
-  /*
   const renderLeaderboard = () => {
     return (
       <div className="min-h-screen bg-bg pb-32">
@@ -2102,7 +2338,6 @@ function AppContent() {
       </div>
     );
   };
-  */
 
   const renderNotebook = () => {
     let filteredWords = CAMBRIDGE_ROADMAP;
@@ -2306,13 +2541,16 @@ function AppContent() {
       {view === 'learn' && renderLearn()}
       {view === 'quiz' && renderQuiz()}
       {view === 'finished' && renderFinished()}
-      {view === 'profile' && <ProfileView user={user} stats={stats} logout={logout} renderBottomNav={renderBottomNav} />}
+      {view === 'profile' && renderProfile()}
       {view === 'notebook' && renderNotebook()}
-      {view === 'leaderboard' && <LeaderboardView leaderboardData={leaderboardData} currentUserUid={user?.uid} />}
+      {view === 'leaderboard' && renderLeaderboard()}
       {view === 'grammar_theory' && renderGrammarTheory()}
       {view === 'daily_plan' && renderDailyPlan()}
       {view === 'micro_skills' && renderMicroSkills()}
       {view === 'micro_skill_detail' && renderMicroSkillDetail()}
+      {view === 'ai_lab' && renderAILab()}
+      {view === 'ai_writing' && renderAIWriting()}
+      {view === 'ai_chat' && renderAIChat()}
     </div>
   );
 }
